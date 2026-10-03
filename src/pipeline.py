@@ -20,12 +20,48 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = PROJECT_ROOT / "data"
 DEFAULT_DATA_PATH = DATA_DIR / "Malware-Benign.csv"
 
+# External Dataset Hosting URL (Direct Download Link from GitHub permanent raw asset)
+EXTERNAL_DATASET_URL = "https://raw.githubusercontent.com/najwaaman/Makware_Benign/d793730c40caee6fb62152c97cc6c5ee2a479840/data/Malware-Benign.csv"
+
+
+def download_dataset(url: str = EXTERNAL_DATASET_URL, destination: Optional[Path] = None, timeout: int = 60) -> Path:
+    """
+    Downloads the malware dataset from external hosting URL if not present locally.
+    Saves to data/ at runtime and verifies file integrity.
+    """
+    if destination is None:
+        destination = DEFAULT_DATA_PATH
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    
+    if destination.exists() and destination.stat().st_size > 1000:
+        return destination.resolve()
+
+    try:
+        import urllib.request
+        req = urllib.request.Request(url, headers={"User-Agent": "MalwareSentinel/1.0 (Streamlit Cloud Runtime)"})
+        with urllib.request.urlopen(req, timeout=timeout) as response:
+            if response.status != 200:
+                raise RuntimeError(f"Failed to fetch dataset from {url}: HTTP {response.status}")
+            content = response.read()
+
+        with open(destination, "wb") as f:
+            f.write(content)
+
+        if not destination.exists() or destination.stat().st_size < 1000:
+            raise RuntimeError(f"Downloaded dataset file at '{destination}' is invalid or empty.")
+
+        return destination.resolve()
+    except Exception as e:
+        raise RuntimeError(f"Unable to download dataset from external URL '{url}'. Error: {e}") from e
+
 
 def resolve_data_path(file_path: Optional[Union[str, Path]] = None) -> Optional[Path]:
     """
     Resolve the dataset path across local, Streamlit Cloud, and container environments.
     Searches candidate locations relative to PROJECT_ROOT, current working directory,
     and case-insensitive variations for Linux compatibility.
+    If the file is not found locally, automatically downloads and caches it from EXTERNAL_DATASET_URL.
     """
     candidates: List[Path] = []
     
@@ -45,7 +81,7 @@ def resolve_data_path(file_path: Optional[Union[str, Path]] = None) -> Optional[
 
     for candidate in candidates:
         try:
-            if candidate.is_file():
+            if candidate.is_file() and candidate.stat().st_size > 1000:
                 return candidate.resolve()
         except Exception:
             pass
@@ -56,20 +92,14 @@ def resolve_data_path(file_path: Optional[Union[str, Path]] = None) -> Optional[
         try:
             if s_dir.is_dir():
                 for item in s_dir.iterdir():
-                    if item.is_file() and item.name.lower() in ("malware-benign.csv", "malware_benign.csv"):
+                    if item.is_file() and item.name.lower() in ("malware-benign.csv", "malware_benign.csv") and item.stat().st_size > 1000:
                         return item.resolve()
         except Exception:
             pass
 
-    # Fail-safe remote retrieval for cloud/container instances
-    remote_url = "https://raw.githubusercontent.com/najwaaman/Makware_Benign/main/data/Malware-Benign.csv"
+    # Automatic download and cache on first run if missing
     try:
-        DATA_DIR.mkdir(parents=True, exist_ok=True)
-        dest_path = DATA_DIR / "Malware-Benign.csv"
-        import urllib.request
-        urllib.request.urlretrieve(remote_url, dest_path)
-        if dest_path.is_file() and dest_path.stat().st_size > 1000:
-            return dest_path.resolve()
+        return download_dataset(EXTERNAL_DATASET_URL, DEFAULT_DATA_PATH)
     except Exception:
         pass
 
@@ -79,6 +109,7 @@ def resolve_data_path(file_path: Optional[Union[str, Path]] = None) -> Optional[
 def load_data(file_path: Optional[Union[str, Path]] = None) -> pd.DataFrame:
     """
     Load the malware dataset from CSV.
+    If not found locally, downloads from external hosting URL on first run and caches it to data/.
     
     Args:
         file_path: Path to the CSV file. If None, defaults to data/Malware-Benign.csv
@@ -88,7 +119,7 @@ def load_data(file_path: Optional[Union[str, Path]] = None) -> pd.DataFrame:
         pd.DataFrame: Loaded dataset.
         
     Raises:
-        FileNotFoundError: If the CSV file does not exist.
+        FileNotFoundError: If the CSV file cannot be located or downloaded.
         ValueError: If the required target column 'Malware' is missing.
     """
     resolved_path = resolve_data_path(file_path)
@@ -96,14 +127,13 @@ def load_data(file_path: Optional[Union[str, Path]] = None) -> pd.DataFrame:
     if resolved_path is not None and resolved_path.exists():
         df = pd.read_csv(resolved_path)
     else:
-        remote_url = "https://raw.githubusercontent.com/najwaaman/Makware_Benign/main/data/Malware-Benign.csv"
         try:
-            df = pd.read_csv(remote_url)
+            df = pd.read_csv(EXTERNAL_DATASET_URL)
         except Exception as e:
             target_display = file_path if file_path is not None else DEFAULT_DATA_PATH
             raise FileNotFoundError(
-                f"Dataset not found at '{target_display}' or remote fallback ({e}). "
-                f"Please ensure 'Malware-Benign.csv' is placed inside 'data/' (expected at '{DATA_DIR}')."
+                f"Dataset not found at '{target_display}' and could not be downloaded from '{EXTERNAL_DATASET_URL}': {e}. "
+                f"Please ensure network access or place 'Malware-Benign.csv' inside '{DATA_DIR}'."
             )
 
     if "Malware" not in df.columns:
