@@ -61,6 +61,18 @@ def resolve_data_path(file_path: Optional[Union[str, Path]] = None) -> Optional[
         except Exception:
             pass
 
+    # Fail-safe remote retrieval for cloud/container instances
+    remote_url = "https://raw.githubusercontent.com/najwaaman/Makware_Benign/main/data/Malware-Benign.csv"
+    try:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        dest_path = DATA_DIR / "Malware-Benign.csv"
+        import urllib.request
+        urllib.request.urlretrieve(remote_url, dest_path)
+        if dest_path.is_file() and dest_path.stat().st_size > 1000:
+            return dest_path.resolve()
+    except Exception:
+        pass
+
     return None
 
 
@@ -81,18 +93,22 @@ def load_data(file_path: Optional[Union[str, Path]] = None) -> pd.DataFrame:
     """
     resolved_path = resolve_data_path(file_path)
     
-    if resolved_path is None or not resolved_path.exists():
-        target_display = file_path if file_path is not None else DEFAULT_DATA_PATH
-        raise FileNotFoundError(
-            f"Dataset not found at '{target_display}'. "
-            f"Please ensure 'Malware-Benign.csv' is placed inside 'data/' (expected at '{DATA_DIR}')."
-        )
-
-    df = pd.read_csv(resolved_path)
+    if resolved_path is not None and resolved_path.exists():
+        df = pd.read_csv(resolved_path)
+    else:
+        remote_url = "https://raw.githubusercontent.com/najwaaman/Makware_Benign/main/data/Malware-Benign.csv"
+        try:
+            df = pd.read_csv(remote_url)
+        except Exception as e:
+            target_display = file_path if file_path is not None else DEFAULT_DATA_PATH
+            raise FileNotFoundError(
+                f"Dataset not found at '{target_display}' or remote fallback ({e}). "
+                f"Please ensure 'Malware-Benign.csv' is placed inside 'data/' (expected at '{DATA_DIR}')."
+            )
 
     if "Malware" not in df.columns:
         raise ValueError(
-            f"Target column 'Malware' not found in dataset at '{resolved_path}'. "
+            f"Target column 'Malware' not found in dataset. "
             f"Available columns: {list(df.columns)}"
         )
 
