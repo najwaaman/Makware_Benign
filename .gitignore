@@ -1,6 +1,8 @@
-﻿__pycache__/
+__pycache__/
 *.pyc
 .venv/
 venv/
 .env
-data/*.csv
+data/*.tmp
+data/*.bak
+!data/Malware-Benign.csv

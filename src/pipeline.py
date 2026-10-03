@@ -21,6 +21,49 @@ DATA_DIR = PROJECT_ROOT / "data"
 DEFAULT_DATA_PATH = DATA_DIR / "Malware-Benign.csv"
 
 
+def resolve_data_path(file_path: Optional[Union[str, Path]] = None) -> Optional[Path]:
+    """
+    Resolve the dataset path across local, Streamlit Cloud, and container environments.
+    Searches candidate locations relative to PROJECT_ROOT, current working directory,
+    and case-insensitive variations for Linux compatibility.
+    """
+    candidates: List[Path] = []
+    
+    if file_path is not None:
+        p = Path(file_path)
+        if p.is_absolute():
+            candidates.append(p)
+        else:
+            candidates.extend([PROJECT_ROOT / p, Path.cwd() / p, p])
+    else:
+        candidates.extend([
+            DEFAULT_DATA_PATH,
+            PROJECT_ROOT / "data" / "Malware-Benign.csv",
+            Path.cwd() / "data" / "Malware-Benign.csv",
+            Path.cwd() / "Malware-Benign.csv",
+        ])
+
+    for candidate in candidates:
+        try:
+            if candidate.is_file():
+                return candidate.resolve()
+        except Exception:
+            pass
+
+    # Fallback: scan candidate directories case-insensitively for Linux filesystem compatibility
+    search_dirs = [DATA_DIR, Path.cwd() / "data", Path.cwd(), PROJECT_ROOT]
+    for s_dir in search_dirs:
+        try:
+            if s_dir.is_dir():
+                for item in s_dir.iterdir():
+                    if item.is_file() and item.name.lower() in ("malware-benign.csv", "malware_benign.csv"):
+                        return item.resolve()
+        except Exception:
+            pass
+
+    return None
+
+
 def load_data(file_path: Optional[Union[str, Path]] = None) -> pd.DataFrame:
     """
     Load the malware dataset from CSV.
@@ -36,24 +79,20 @@ def load_data(file_path: Optional[Union[str, Path]] = None) -> pd.DataFrame:
         FileNotFoundError: If the CSV file does not exist.
         ValueError: If the required target column 'Malware' is missing.
     """
-    if file_path is None:
-        target_path = DEFAULT_DATA_PATH
-    else:
-        target_path = Path(file_path)
-        if not target_path.is_absolute():
-            target_path = PROJECT_ROOT / target_path
-
-    if not target_path.exists():
+    resolved_path = resolve_data_path(file_path)
+    
+    if resolved_path is None or not resolved_path.exists():
+        target_display = file_path if file_path is not None else DEFAULT_DATA_PATH
         raise FileNotFoundError(
-            f"Dataset not found at '{target_path}'. "
-            f"Please ensure 'Malware-Benign.csv' is placed inside '{DATA_DIR}'."
+            f"Dataset not found at '{target_display}'. "
+            f"Please ensure 'Malware-Benign.csv' is placed inside 'data/' (expected at '{DATA_DIR}')."
         )
 
-    df = pd.read_csv(target_path)
+    df = pd.read_csv(resolved_path)
 
     if "Malware" not in df.columns:
         raise ValueError(
-            f"Target column 'Malware' not found in dataset at '{target_path}'. "
+            f"Target column 'Malware' not found in dataset at '{resolved_path}'. "
             f"Available columns: {list(df.columns)}"
         )
 

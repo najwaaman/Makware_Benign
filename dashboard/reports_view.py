@@ -40,8 +40,12 @@ def render_batch_analysis_page(
         st.info("ℹ️ **Safety Note:** This module processes static tabular numeric data only. It never executes binary code.")
 
         # Template CSV Download for Testing
-        sample_path = project_root / "data" / "Malware-Benign.csv"
-        if sample_path.exists():
+        try:
+            from src.pipeline import resolve_data_path
+            sample_path = resolve_data_path()
+        except Exception:
+            sample_path = project_root / "data" / "Malware-Benign.csv"
+        if sample_path is not None and sample_path.exists():
             try:
                 sample_df = pd.read_csv(sample_path, nrows=50)
                 csv_cols = [c for c in feature_columns if c in sample_df.columns]
