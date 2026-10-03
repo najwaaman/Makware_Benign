@@ -1,0 +1,19 @@
+{
+  "timestamp": "2026-09-24T19:02:09Z",
+  "random_seed": 42,
+  "selection_criterion": "Highest mean 5-fold Stratified CV F1 score on training set (tie-break: CV ROC-AUC)",
+  "selected_model": "HistGradientBoosting",
+  "total_dataset_rows": 19611,
+  "train_rows": 15688,
+  "test_rows": 3923,
+  "raw_features_count": 77,
+  "final_selected_features_count": 16,
+  "libraries": {
+    "python_version": "3.14.3",
+    "scikit_learn_version": "1.9.0",
+    "joblib_version": "1.5.3",
+    "pandas_version": "3.0.3",
+    "numpy_version": "2.4.6",
+    "matplotlib_version": "3.11.0"
+  }
+}
